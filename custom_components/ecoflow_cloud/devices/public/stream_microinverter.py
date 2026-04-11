@@ -16,20 +16,25 @@ from custom_components.ecoflow_cloud.sensor import (
     VoltSensorEntity,
     WattsSensorEntity,
 )
+from custom_components.ecoflow_cloud.devices.public.bts_stream_extras import (
+    StreamPvWattsSensorEntity,
+)
 
 
 class StreamMicroinveter(BaseDevice):
     def sensors(self, client: EcoflowApiClient) -> list[SensorEntity]:
         return [
             WattsSensorEntity(client, self, "gridConnectionPower", const.STREAM_POWER_AC),
-            WattsSensorEntity(client, self, "powGetPv", const.STREAM_POWER_PV_1, False, True),
-            WattsSensorEntity(client, self, "powGetPv2", const.STREAM_POWER_PV_2, False, True),
+            # Stream MicroInverter firmware does not emit powGetPv*.
+            # Compute watts from plugInInfoPv*Amp x plugInInfoPv*Vol via helper.
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPvAmp",  const.STREAM_POWER_PV_1),
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_POWER_PV_2),
             VoltSensorEntity(client, self, "gridConnectionVol", const.STREAM_POWER_VOL, False),
-            VoltSensorEntity(client, self, "plugInInfoPvVol", const.STREAM_IN_VOL_PV_1, False, True),
-            VoltSensorEntity(client, self, "plugInInfoPv2Vol", const.STREAM_IN_VOL_PV_2, False, True),
+            VoltSensorEntity(client, self, "plugInInfoPvVol", const.STREAM_IN_VOL_PV_1),
+            VoltSensorEntity(client, self, "plugInInfoPv2Vol", const.STREAM_IN_VOL_PV_2),
             InAmpSensorEntity(client, self, "gridConnectionAmp", const.STREAM_POWER_AMP, False),
-            InAmpSensorEntity(client, self, "plugInInfoPvAmp", const.STREAM_IN_AMPS_PV_1, False, True),
-            InAmpSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_IN_AMPS_PV_2, False, True),
+            InAmpSensorEntity(client, self, "plugInInfoPvAmp", const.STREAM_IN_AMPS_PV_1),
+            InAmpSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_IN_AMPS_PV_2),
             CelsiusSensorEntity(client, self, "invNtcTemp3", "Inverter NTC Temperature"),
             FrequencySensorEntity(client, self, "gridConnectionFreq", "Grid Frequency"),
             StatusSensorEntity(client, self),
