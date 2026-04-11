@@ -1,8 +1,9 @@
 {
   "domain": "ecoflow_cloud",
-  "name": "Ecoflow-Cloud",
+  "name": "EcoFlow-Cloud (BTS Fork)",
   "codeowners": [
-    "@tolwi"
+    "@tolwi",
+    "@optimusbasti"
   ],
   "config_flow": true,
   "dependencies": [
@@ -17,5 +18,5 @@
     "protobuf==6.32.0",
     "jsonpath-ng>=1.7.0"
   ],
-  "version": "1.4.0"
+  "version": "1.4.1"
 }
