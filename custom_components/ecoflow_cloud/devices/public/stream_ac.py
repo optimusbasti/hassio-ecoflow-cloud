@@ -182,28 +182,23 @@ class StreamAC(BaseDevice):
             # "powConsumptionMeasurement": 2,
             # "powGetBpCms": 1915.0862,
             WattsSensorEntity(client, self, "powGetBpCms", const.STREAM_POWER_BATTERY),
-            # PV1-PV4 watts: Stream Ultra firmware does not emit powGetPv*.
-            # Compute from plugInInfoPv{,2,3,4}Amp * plugInInfoPv{,2,3,4}Vol instead.
-            # See https://github.com/tolwi/hassio-ecoflow-cloud/issues/584
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPvAmp",  "plugInInfoPvVol",  const.STREAM_POWER_PV_1, True, True),
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPv2Amp", "plugInInfoPv2Vol", const.STREAM_POWER_PV_2, True, True),
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPv3Amp", "plugInInfoPv3Vol", const.STREAM_POWER_PV_3, True, True),
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPv4Amp", "plugInInfoPv4Vol", const.STREAM_POWER_PV_4, True, True),
-            # Per-PV voltage (from EcoFlow device payload)
-            VoltSensorEntity(client, self, "plugInInfoPvVol",  const.STREAM_IN_VOL_PV_1, True, True),
-            VoltSensorEntity(client, self, "plugInInfoPv2Vol", const.STREAM_IN_VOL_PV_2, True, True),
-            VoltSensorEntity(client, self, "plugInInfoPv3Vol", const.STREAM_IN_VOL_PV_3, True, True),
-            VoltSensorEntity(client, self, "plugInInfoPv4Vol", const.STREAM_IN_VOL_PV_4, True, True),
-            # Per-PV current (from EcoFlow device payload)
-            AmpSensorEntity(client, self, "plugInInfoPvAmp",  const.STREAM_IN_AMPS_PV_1, True, True),
-            AmpSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_IN_AMPS_PV_2, True, True),
-            AmpSensorEntity(client, self, "plugInInfoPv3Amp", const.STREAM_IN_AMPS_PV_3, True, True),
-            AmpSensorEntity(client, self, "plugInInfoPv4Amp", const.STREAM_IN_AMPS_PV_4, True, True),
-            # Legacy keepers (disabled by default) for older firmware that does emit powGetPv*
-            WattsSensorEntity(client, self, "powGetPv",  const.STREAM_POWER_PV_1, False, True),
-            WattsSensorEntity(client, self, "powGetPv2", const.STREAM_POWER_PV_2, False, True),
-            WattsSensorEntity(client, self, "powGetPv3", const.STREAM_POWER_PV_3, False, True),
-            WattsSensorEntity(client, self, "powGetPv4", const.STREAM_POWER_PV_4, False, True),
+            # Per-PV power, voltage, current (Stream Ultra family).
+            # Stream Ultra firmware does not emit powGetPv*; the real keys are
+            # plugInInfoPv{,2,3,4}Amp + plugInInfoPv{,2,3,4}Vol. The watts value
+            # is computed inside StreamPvWattsSensorEntity which derives vol_key
+            # from amp_key automatically. See upstream issue #584.
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPvAmp",  const.STREAM_POWER_PV_1),
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_POWER_PV_2),
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPv3Amp", const.STREAM_POWER_PV_3),
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPv4Amp", const.STREAM_POWER_PV_4),
+            VoltSensorEntity(client, self, "plugInInfoPvVol",  const.STREAM_IN_VOL_PV_1),
+            VoltSensorEntity(client, self, "plugInInfoPv2Vol", const.STREAM_IN_VOL_PV_2),
+            VoltSensorEntity(client, self, "plugInInfoPv3Vol", const.STREAM_IN_VOL_PV_3),
+            VoltSensorEntity(client, self, "plugInInfoPv4Vol", const.STREAM_IN_VOL_PV_4),
+            AmpSensorEntity(client, self, "plugInInfoPvAmp",  const.STREAM_IN_AMPS_PV_1),
+            AmpSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_IN_AMPS_PV_2),
+            AmpSensorEntity(client, self, "plugInInfoPv3Amp", const.STREAM_IN_AMPS_PV_3),
+            AmpSensorEntity(client, self, "plugInInfoPv4Amp", const.STREAM_IN_AMPS_PV_4),
             # "powGetPvSum": 2051.3975,
             WattsSensorEntity(client, self, "powGetPvSum", const.STREAM_POWER_PV_SUM),
             # "powGetSchuko1": 0.0,
