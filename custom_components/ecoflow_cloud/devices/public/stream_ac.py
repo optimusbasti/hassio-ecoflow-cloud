@@ -183,14 +183,26 @@ class StreamAC(BaseDevice):
             # "powGetBpCms": 1915.0862,
             WattsSensorEntity(client, self, "powGetBpCms", const.STREAM_POWER_BATTERY),
             # Per-PV power, voltage, current (Stream Ultra family).
-            # Stream Ultra firmware does not emit powGetPv*; the real keys are
-            # plugInInfoPv{,2,3,4}Amp + plugInInfoPv{,2,3,4}Vol. The watts value
-            # is computed inside StreamPvWattsSensorEntity which derives vol_key
-            # from amp_key automatically. See upstream issue #584.
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPvAmp",  const.STREAM_POWER_PV_1),
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_POWER_PV_2),
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPv3Amp", const.STREAM_POWER_PV_3),
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPv4Amp", const.STREAM_POWER_PV_4),
+            # The Stream Ultra firmware behaviour for per-PV reporting depends
+            # on the firmware version installed:
+            #   - Firmware <= 1.0.1.40: powGetPv / powGetPv2..4 emitted, per-PV
+            #     watts are correct, plugInInfoPv*Amp returns 0.
+            #   - Firmware >= 1.0.1.41: powGetPv* returns 0, per-PV data lives in
+            #     plugInInfoPv{,2,3,4}Amp + plugInInfoPv{,2,3,4}Vol instead.
+            # See upstream issues #582, #584. To stay firmware-agnostic we
+            # register BOTH mapping variants with auto_enable=True. HA enables
+            # whichever set first sees a non-zero value.
+            #
+            # New-firmware path (computed amp x vol via BTS helper)
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPvAmp",  const.STREAM_POWER_PV_1, False, True),
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_POWER_PV_2, False, True),
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPv3Amp", const.STREAM_POWER_PV_3, False, True),
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPv4Amp", const.STREAM_POWER_PV_4, False, True),
+            # Old-firmware path (legacy powGetPv* keys, auto-enable on first sighting)
+            WattsSensorEntity(client, self, "powGetPv",  const.STREAM_POWER_PV_1, False, True),
+            WattsSensorEntity(client, self, "powGetPv2", const.STREAM_POWER_PV_2, False, True),
+            WattsSensorEntity(client, self, "powGetPv3", const.STREAM_POWER_PV_3, False, True),
+            WattsSensorEntity(client, self, "powGetPv4", const.STREAM_POWER_PV_4, False, True),
             VoltSensorEntity(client, self, "plugInInfoPvVol",  const.STREAM_IN_VOL_PV_1),
             VoltSensorEntity(client, self, "plugInInfoPv2Vol", const.STREAM_IN_VOL_PV_2),
             VoltSensorEntity(client, self, "plugInInfoPv3Vol", const.STREAM_IN_VOL_PV_3),

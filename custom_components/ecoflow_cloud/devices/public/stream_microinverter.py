@@ -25,10 +25,13 @@ class StreamMicroinveter(BaseDevice):
     def sensors(self, client: EcoflowApiClient) -> list[SensorEntity]:
         return [
             WattsSensorEntity(client, self, "gridConnectionPower", const.STREAM_POWER_AC),
-            # Stream MicroInverter firmware does not emit powGetPv*.
-            # Compute watts from plugInInfoPv*Amp x plugInInfoPv*Vol via helper.
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPvAmp",  const.STREAM_POWER_PV_1),
-            StreamPvWattsSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_POWER_PV_2),
+            # Per-PV mapping is firmware-dependent. See stream_ac.py comment.
+            # New-firmware path (computed amp x vol via BTS helper)
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPvAmp",  const.STREAM_POWER_PV_1, False, True),
+            StreamPvWattsSensorEntity(client, self, "plugInInfoPv2Amp", const.STREAM_POWER_PV_2, False, True),
+            # Old-firmware path (legacy powGetPv* keys)
+            WattsSensorEntity(client, self, "powGetPv",  const.STREAM_POWER_PV_1, False, True),
+            WattsSensorEntity(client, self, "powGetPv2", const.STREAM_POWER_PV_2, False, True),
             VoltSensorEntity(client, self, "gridConnectionVol", const.STREAM_POWER_VOL, False),
             VoltSensorEntity(client, self, "plugInInfoPvVol", const.STREAM_IN_VOL_PV_1),
             VoltSensorEntity(client, self, "plugInInfoPv2Vol", const.STREAM_IN_VOL_PV_2),
