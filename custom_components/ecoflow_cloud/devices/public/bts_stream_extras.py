@@ -76,4 +76,6 @@ class StreamPvWattsSensorEntity(WattsSensorEntity):
         # _update_value, schedule_update_ha_state). We deliberately mutate a
         # shallow copy to avoid surprising other sensors that read the same
         # payload dict afterwards.
-        super()._updated({**data, self._mqtt_key: watts})
+        # NOTE: upstream 1.5.0 renamed _mqtt_key -> __mqtt_key (name-mangled);
+        # use the public mqtt_key property for forward compatibility.
+        super()._updated({**data, self.mqtt_key: watts})
