@@ -2728,3 +2728,5 @@ For information on how to add, remove, and configure devices, please refer to th
 - Status
 
 </p></details>
+
+<!-- v1.5.1 (2026-04-19): Patch-bump for HACS cache refresh after v1.5.0 release -->
