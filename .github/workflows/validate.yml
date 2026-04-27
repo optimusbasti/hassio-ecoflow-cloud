@@ -10,6 +10,11 @@ on:
     - cron: "0 4 * * 1"
   workflow_dispatch:
 
+# Avoid duplicate runs when a PR is opened from a branch in the same repo
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   hassfest:
     name: hassfest
