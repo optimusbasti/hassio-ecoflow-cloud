@@ -1,0 +1,65 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Monday 04:00 UTC — catches HACS/hassfest API changes
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+# Avoid duplicate runs when a PR is opened from a branch in the same repo
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+
+  ruff:
+    name: Python lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install ruff
+        run: pip install ruff
+      - name: ruff check
+        run: ruff check custom_components
+
+  pytest:
+    name: Python tests (pytest)
+    runs-on: ubuntu-latest
+    if: hashFiles('tests/**/*.py', 'custom_components/**/test_*.py') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-asyncio pytest-homeassistant-custom-component
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Run pytest
+        run: pytest -q
