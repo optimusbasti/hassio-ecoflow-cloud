@@ -33,8 +33,36 @@ jobs:
           echo "tag=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "Upstream latest tag: $tag"
 
+      - name: Compare versions (semver)
+        id: compare
+        env:
+          LOCAL: ${{ steps.local.outputs.version }}
+          UPSTREAM: ${{ steps.upstream.outputs.tag }}
+        run: |
+          # Strip any +bts.N suffix from local for the semver comparison —
+          # we only care about the upstream-base part vs upstream tag.
+          LOCAL_BASE="${LOCAL%%+*}"
+          UPSTREAM_CLEAN="${UPSTREAM#v}"
+
+          # Use sort -V for natural version comparison. Drift = upstream > local-base.
+          # If upstream <= local-base, BTS is already ahead (expected for our fork)
+          # and no issue should be opened.
+          if [ "$LOCAL_BASE" = "$UPSTREAM_CLEAN" ]; then
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+            echo "Local base $LOCAL_BASE matches upstream $UPSTREAM_CLEAN — in sync"
+          else
+            highest=$(printf '%s\n%s\n' "$LOCAL_BASE" "$UPSTREAM_CLEAN" | sort -V | tail -n1)
+            if [ "$highest" = "$UPSTREAM_CLEAN" ]; then
+              echo "drift=true" >> "$GITHUB_OUTPUT"
+              echo "Upstream $UPSTREAM_CLEAN > local base $LOCAL_BASE — drift detected"
+            else
+              echo "drift=false" >> "$GITHUB_OUTPUT"
+              echo "Local base $LOCAL_BASE > upstream $UPSTREAM_CLEAN — BTS is ahead, no drift"
+            fi
+          fi
+
       - name: Open issue if drift detected
-        if: steps.local.outputs.version != steps.upstream.outputs.tag
+        if: steps.compare.outputs.drift == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LOCAL: ${{ steps.local.outputs.version }}
