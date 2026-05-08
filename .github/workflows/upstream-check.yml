@@ -29,8 +29,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag=$(gh release view --repo tolwi/hassio-ecoflow-cloud --json tagName -q .tagName)
-          # Strip leading 'v' if present
+          tag=$(gh release view --repo tolwi/hassio-ecoflow-cloud --json tagName --jq .tagName)
           echo "tag=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "Upstream latest tag: $tag"
 
@@ -41,25 +40,26 @@ jobs:
           LOCAL: ${{ steps.local.outputs.version }}
           UPSTREAM: ${{ steps.upstream.outputs.tag }}
         run: |
-          # Skip if an open drift issue already exists
-          existing=$(gh issue list --search "Upstream drift in:title" --state open --json number --jq '.[0].number')
+          existing=$(gh issue list --search "Upstream drift in:title" --state open --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             echo "Open drift issue already exists (#$existing) — skipping"
             exit 0
           fi
+          body=$(printf '%s\n' \
+            "Monthly check found upstream tolwi/hassio-ecoflow-cloud has a newer release than this fork." \
+            "" \
+            "- BTS local manifest: \`${LOCAL}\`" \
+            "- Upstream latest: \`v${UPSTREAM}\`" \
+            "- Compare: https://github.com/tolwi/hassio-ecoflow-cloud/compare/v${LOCAL}...v${UPSTREAM}" \
+            "" \
+            "Review-Schritt:" \
+            "1. Diff prüfen — vor allem auf \`devices/public/stream_*.py\` (BTS-Patches betroffen?)" \
+            "2. Lokal mergen, Konflikte resolven" \
+            "3. \`manifest.json\` version bumpen (Patch-Level oder \`+bts.<N>\`-Suffix)" \
+            "4. \`BTS-FORK.md\` ggf. um neue Upstream-Notes ergänzen" \
+            "5. Smoke-Tests laufen lassen (\`pytest tests/\`)" \
+            "6. Tag + Release pushen → release-drafter generiert Notes")
           gh issue create \
             --title "Upstream drift: tolwi v${UPSTREAM} > BTS v${LOCAL}" \
             --label "upstream-sync" \
-            --body "Monthly check found upstream tolwi/hassio-ecoflow-cloud has a newer release than this fork.
-
-- BTS local manifest: \`${LOCAL}\`
-- Upstream latest: \`v${UPSTREAM}\`
-- Compare: https://github.com/tolwi/hassio-ecoflow-cloud/compare/v${LOCAL}...v${UPSTREAM}
-
-Review-Schritt:
-1. Diff prüfen — vor allem auf \`devices/public/stream_*.py\` (BTS-Patches betroffen?)
-2. Lokal mergen, Konflikte resolven
-3. \`manifest.json\` version bumpen (Patch-Level oder \`+bts.<N>\`-Suffix)
-4. \`BTS-FORK.md\` ggf. um neue Upstream-Notes ergänzen
-5. Smoke-Tests laufen lassen (\`pytest tests/\`)
-6. Tag + Release pushen → release-drafter generiert Notes"
+            --body "$body"
