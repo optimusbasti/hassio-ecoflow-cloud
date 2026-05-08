@@ -76,4 +76,4 @@ Bei neuen tolwi/hassio-ecoflow-cloud Releases manuell diff-mergen, Version mit `
 
 ## Lizenz
 
-MIT (gleich wie Upstream).
+Apache-2.0 (gleich wie Upstream tolwi).

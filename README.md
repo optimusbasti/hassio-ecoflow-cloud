@@ -1,9 +1,44 @@
-# EcoFlow Cloud Integration for Home Assistant
+# EcoFlow Cloud Integration — BTS Fork
+
+[![GitHub release](https://img.shields.io/github/v/release/optimusbasti/hassio-ecoflow-cloud?include_prereleases&sort=semver&color=blue)](https://github.com/optimusbasti/hassio-ecoflow-cloud/releases/)
+[![License](https://img.shields.io/github/license/optimusbasti/hassio-ecoflow-cloud?color=blue)](LICENSE)
+[![CI](https://github.com/optimusbasti/hassio-ecoflow-cloud/actions/workflows/ci.yml/badge.svg)](https://github.com/optimusbasti/hassio-ecoflow-cloud/actions/workflows/ci.yml)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+
+Privater BTS-Fork von [tolwi/hassio-ecoflow-cloud](https://github.com/tolwi/hassio-ecoflow-cloud) mit **Per-PV-Erweiterung für die Stream-Familie** (Stream Ultra, Stream Ultra X, Stream AC Pro, Stream MicroInverter). Stream-Firmware emittet `plugInInfoPv{N}Amp/Vol` statt der upstream-erwarteten `powGetPv{N}` Keys — dieser Fork füllt die Lücke.
+
+## Was anders ist als upstream
+
+- **4 zusätzliche Per-PV-Sensoren pro Stream Ultra / Ultra X / AC Pro Device** (Power, Volt, Amp je MPPT × 4 MPPTs = 12 neue Entities)
+- **6 zusätzliche/aktivierte Sensoren pro Stream MicroInverter** (2 MPPTs)
+- Synthetic-mqtt-Key löst Unique-ID-Collision mit upstream `AmpSensorEntity`
+- Auto-derive `vol_key` aus `amp_key` für weniger Boilerplate in Device-Files
+- Volle Delegation an upstream `_updated()` für sauberes Auto-Enable + Recorder-Integration
+
+Vollständige Patch-Doku, Geänderte-Dateien-Liste, Cleanup-Anleitung nach Upgrades und Sync-mit-Upstream-Strategie: **[BTS-FORK.md](BTS-FORK.md)**.
+
+## Installation via HACS
+
+```
+1. HACS → ⋮ → Custom repositories
+2. Repository URL: https://github.com/optimusbasti/hassio-ecoflow-cloud
+3. Type: Integration → ADD
+4. Im HACS-Hauptscreen "EcoFlow-Cloud (BTS Fork)" suchen → DOWNLOAD
+5. Home Assistant restart
+```
+
+## Lizenz
+
+Apache-2.0 (gleich wie Upstream tolwi).
+
+---
+
+**Upstream README** (unverändert übernommen, bezieht sich auf [tolwi/hassio-ecoflow-cloud](https://github.com/tolwi/hassio-ecoflow-cloud) — alle Badges/Links zeigen auf das Upstream-Repo):
+
 [![GitHub release](https://img.shields.io/github/release/tolwi/hassio-ecoflow-cloud?include_prereleases=&sort=semver&color=blue)](https://github.com/tolwi/hassio-ecoflow-cloud/releases/)
 [![issues - hassio-ecoflow-cloud](https://img.shields.io/github/issues/tolwi/hassio-ecoflow-cloud)](https://github.com/tolwi/hassio-ecoflow-cloud/issues)
 [![GH-code-size](https://img.shields.io/github/languages/code-size/tolwi/hassio-ecoflow-cloud?color=red)](https://github.com/tolwi/hassio-ecoflow-cloud)
 [![GH-last-commit](https://img.shields.io/github/last-commit/tolwi/hassio-ecoflow-cloud?style=flat-square)](https://github.com/tolwi/hassio-ecoflow-cloud/commits/main)
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![HACS validation](https://github.com/tolwi/hassio-ecoflow-cloud/workflows/Validate%20with%20hassfest%20and%20HACS/badge.svg)](https://github.com/tolwi/hassio-ecoflow-cloud/actions?query=workflow:"Validate%20with%20hassfest%20and%20HACS")
 
 Inspired by [hassio-ecoflow](https://github.com/vwt12eh8/hassio-ecoflow) and [ecoflow-mqtt-prometheus-exporter](https://github.com/berezhinskiy/ecoflow-mqtt-prometheus-exporter) this integration uses EcoFlow MQTT Broker `mqtt.ecoflow.com` to monitor and control the device.
