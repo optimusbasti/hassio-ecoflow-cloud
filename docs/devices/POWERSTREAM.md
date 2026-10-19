@@ -1,0 +1,79 @@
+## POWERSTREAM
+
+*Sensors*
+- ESP Temperature (`20_1.espTempsensor`)
+- Solar 1 Watts (`20_1.pv1InputWatts`)
+- Solar 1 Input Potential (`20_1.pv1InputVolt`)
+- Solar 1 Op Potential (`20_1.pv1OpVolt`)
+- Solar 1 Current (`20_1.pv1InputCur`)
+- Solar 1 Temperature (`20_1.pv1Temp`)
+- Solar 1 Relay Status (`20_1.pv1RelayStatus`)
+- Solar 1 Error Code (`20_1.pv1ErrCode`)   _(disabled)_
+- Solar 1 Warning Code (`20_1.pv1WarnCode`)   _(disabled)_
+- Solar 1 Status (`20_1.pv1Statue`)   _(disabled)_
+- Solar 2 Watts (`20_1.pv2InputWatts`)
+- Solar 2 Input Potential (`20_1.pv2InputVolt`)
+- Solar 2 Op Potential (`20_1.pv2OpVolt`)
+- Solar 2 Current (`20_1.pv2InputCur`)
+- Solar 2 Temperature (`20_1.pv2Temp`)
+- Solar 2 Relay Status (`20_1.pv2RelayStatus`)
+- Solar 2 Error Code (`20_1.pv2ErrCode`)   _(disabled)_
+- Solar 2 Warning Code (`20_1.pv2WarningCode`)   _(disabled)_
+- Solar 2 Status (`20_1.pv2Statue`)   _(disabled)_
+- Battery Type (`20_1.bpType`)   _(disabled)_
+- Battery Charge (`20_1.batSoc`)
+- Battery Input Watts (`20_1.batInputWatts`)
+- Battery Input Potential (`20_1.batInputVolt`)
+- Battery Op Potential (`20_1.batOpVolt`)
+- Battery Input Current (`20_1.batInputCur`)
+- Battery Temperature (`20_1.batTemp`)
+- Charge Time (`20_1.chgRemainTime`)
+- Discharge Time (`20_1.dsgRemainTime`)
+- Battery Error Code (`20_1.batErrCode`)   _(disabled)_
+- Battery Warning Code (`20_1.batWarningCode`)   _(disabled)_
+- Battery Status (`20_1.batStatue`)   _(disabled)_
+- LLC Input Potential (`20_1.llcInputVolt`)   _(disabled)_
+- LLC Op Potential (`20_1.llcOpVolt`)   _(disabled)_
+- LLC Temperature (`20_1.llcTemp`)
+- LLC Error Code (`20_1.llcErrCode`)   _(disabled)_
+- LLC Warning Code (`20_1.llcWarningCode`)   _(disabled)_
+- LLC Status (`20_1.llcStatue`)   _(disabled)_
+- Inverter On/Off Status (`20_1.invOnOff`)
+- Inverter Output Watts (`20_1.invOutputWatts`)
+- Inverter Output Potential (`20_1.invInputVolt`)   _(disabled)_
+- Inverter Op Potential (`20_1.invOpVolt`)
+- Inverter Output Current (`20_1.invOutputCur`)
+- Inverter Frequency (`20_1.invFreq`)
+- Inverter Temperature (`20_1.invTemp`)
+- Inverter Relay Status (`20_1.invRelayStatus`)
+- Inverter Error Code (`20_1.invErrCode`)   _(disabled)_
+- Inverter Warning Code (`20_1.invWarnCode`)   _(disabled)_
+- Inverter Status (`20_1.invStatue`)   _(disabled)_
+- Custom Load Power (`20_1.permanentWatts`)
+- Smart Plug Loads (`20_1.dynamicWatts`)
+- Rated Power (`20_1.ratedPower`)
+- Lower Battery Limit (`20_1.lowerLimit`)   _(disabled)_
+- Upper Battery Limit (`20_1.upperLimit`)   _(disabled)_
+- Wireless Error Code (`20_1.wirelessErrCode`)   _(disabled)_
+- Wireless Warning Code (`20_1.wirelessWarnCode`)   _(disabled)_
+- LED Brightness (`20_1.invBrightness`)   _(disabled)_
+- Heartbeat Frequency (`20_1.heartbeatFrequency`)   _(disabled)_
+- PV1 Today Energy Total (`254_32.watthPv1`)
+- PV2 Today Energy Total (`254_32.watthPv2`)
+- From Battery Today Energy Total (`254_32.watthFromBattery`)
+- To Battery Today Energy Total (`254_32.watthToBattery`)
+- To Smart Plugs Today Energy Total (`254_32.watthToSmartPlugs`)
+- Status
+
+*Switches*
+- Feed-in Control (`20_1.feedProtect` -> `{"PowerStreamSendHeaderMsg": {"msg": [{"pdata": {"PowerStreamSetValue": {"value": 6666}}, "src": 32, "dest": 53, "d_src": 1, "d_dest": 1, "check_type": 3, "cmd_func": 20, "cmd_id": 143, "data_len": 3, "need_ack": 1, "version": 19, "payload_ver": 1, "from_": "HomeAssistant", "device_sn": "SN"}]}}`)
+
+*Sliders (numbers)*
+- Max Charge Level (`20_1.upperLimit` -> `{"PowerStreamSendHeaderMsg": {"msg": [{"pdata": {"PowerStreamBatUpperPack": {"upper_limit": 6666}}, "src": 32, "dest": 53, "d_src": 1, "d_dest": 1, "check_type": 3, "cmd_func": 20, "cmd_id": 133, "data_len": 3, "need_ack": 1, "version": 19, "payload_ver": 1, "from_": "HomeAssistant", "device_sn": "SN"}]}}` [50 - 100])
+- Min Discharge Level (`20_1.lowerLimit` -> `{"PowerStreamSendHeaderMsg": {"msg": [{"pdata": {"PowerStreamBatLowerPack": {"lower_limit": 6666}}, "src": 32, "dest": 53, "d_src": 1, "d_dest": 1, "check_type": 3, "cmd_func": 20, "cmd_id": 132, "data_len": 3, "need_ack": 1, "version": 19, "payload_ver": 1, "from_": "HomeAssistant", "device_sn": "SN"}]}}` [0 - 30])
+- Custom Load Power (`20_1.permanentWatts` -> `{"PowerStreamSendHeaderMsg": {"msg": [{"pdata": {"PowerStreamPermanentWattsPack": {"permanent_watts": 6666}}, "src": 32, "dest": 53, "d_src": 1, "d_dest": 1, "check_type": 3, "cmd_func": 20, "cmd_id": 129, "data_len": 3, "need_ack": 1, "version": 19, "payload_ver": 1, "from_": "HomeAssistant", "device_sn": "SN"}]}}` [0 - 800])
+
+*Selects*
+- Power supply mode (`20_1.supplyPriority` -> `{"PowerStreamSendHeaderMsg": {"msg": [{"pdata": {"PowerStreamSupplyPriorityPack": {"supply_priority": 6666}}, "src": 32, "dest": 53, "d_src": 1, "d_dest": 1, "check_type": 3, "cmd_func": 20, "cmd_id": 130, "data_len": 3, "need_ack": 1, "version": 19, "payload_ver": 1, "from_": "HomeAssistant", "device_sn": "SN"}]}}` [Prioritize power supply (0), Prioritize power storage (1)])
+
+

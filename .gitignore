@@ -1,0 +1,14 @@
+__pycache__
+venv
+.venv
+.idea
+.DS_Store
+.vscode/settings.json
+.coverage
+requirements.test.txt
+setup.cfg
+tests
+.devcontainer/.env
+tools
+mise.local.toml
+.claude

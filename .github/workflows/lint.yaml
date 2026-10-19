@@ -1,0 +1,31 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mise
+        uses: jdx/mise-action@v2
+        with:
+          cache: true
+
+      - name: Lint
+        run: mise run lint
+
+      - name: Deferred lint rules (advisory)
+        run: |
+          {
+            echo '### Deferred ruff rules'
+            echo '```'
+            mise run --quiet lint:debt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,475 @@
+import asyncio
+import json
+import logging
+import os
+import re
+from typing import Any
+from unittest.mock import Mock
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.frame import async_setup as frame_setup
+
+from custom_components.ecoflow_cloud.api.message import PrivateAPIMessageProtocol
+from custom_components.ecoflow_cloud.binary_sensor import MiscBinarySensorEntity
+from custom_components.ecoflow_cloud.device_data import DeviceData, DeviceOptions
+from custom_components.ecoflow_cloud.devices import BaseDevice, EcoflowDeviceInfo
+from custom_components.ecoflow_cloud.devices.registry import (
+    device_by_product,
+    device_support_sub_devices,
+    devices,
+)
+from custom_components.ecoflow_cloud.entities import (
+    BaseNumberEntity,
+    BaseSelectEntity,
+    BaseSensorEntity,
+    BaseSwitchEntity,
+    EcoFlowBaseCommandEntity,
+    EcoFlowDictEntity,
+)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Configuration constants
+MARKER_VALUE = 6666
+OUTPUT_DIR = "devices"
+SUMMARY_FILENAME = "summary.md"
+README_FILENAME = "../README.md"
+README_MARKER = "## Current state"
+
+# Device test configuration constants
+DEVICE_SN = "SN"
+DEVICE_NAME = "_[Device Name]_"
+DEVICE_TYPE = "TYPE"
+DATA_TOPIC = "DATA_TOPIC"
+DEVICE_STATUS = 1
+SET_TOPIC = "SET_TOPIC"
+SET_REPLY_TOPIC = "SET_REPLY_TOPIC"
+
+
+def create_test_device_info() -> EcoflowDeviceInfo:
+    """Create a test device info object."""
+    return EcoflowDeviceInfo(
+        public_api=False,
+        sn=DEVICE_SN,
+        name=DEVICE_NAME,
+        device_type=DEVICE_TYPE,
+        data_topic=DATA_TOPIC,
+        status=DEVICE_STATUS,
+        set_topic=SET_TOPIC,
+        set_reply_topic=SET_REPLY_TOPIC,
+        get_topic=None,
+        get_reply_topic=None,
+        status_topic=None,
+    )
+
+
+# Multi-device configurations
+MULTI_DEVICE_CONFIGURATIONS = {
+    "Power Kits": [
+        "bbcin",
+        "bbcout",
+        "iclow",
+        "bpxxx",
+        "kitscc",
+        "lddc",
+        "ichigh",
+        "ldac",
+    ]
+}
+
+# Initialize configurations
+device_options = DeviceOptions(0, 0, False, False, 600, True)
+
+
+class MockSetup:
+    """Handles setup of mock objects for documentation generation."""
+
+    @staticmethod
+    async def setup_hass() -> HomeAssistant:
+        """Set up Home Assistant with all necessary mocks."""
+        hass = HomeAssistant("./")
+        hass.data["entity_registry"] = Mock()
+        hass.data["device_registry"] = Mock()
+
+        await hass.async_start()
+        frame_setup(hass)
+
+        logger.info("Home Assistant mock setup completed")
+        return hass
+
+
+class DocumentationGenerator:
+    """Handles generation of device documentation."""
+
+    def get_device_data(self, device_type: str) -> list[DeviceData]:
+        """Get device data for a given device type."""
+        if device_type in device_support_sub_devices:
+            if device_type in MULTI_DEVICE_CONFIGURATIONS:
+                return [
+                    DeviceData(
+                        DEVICE_SN,
+                        DEVICE_NAME,
+                        module_type,
+                        device_options,
+                        "DISPLAY_NAME",
+                        DeviceData(
+                            DEVICE_SN,
+                            DEVICE_NAME,
+                            DEVICE_TYPE,
+                            device_options,
+                            None,
+                            None,
+                        ),
+                    )
+                    for module_type in MULTI_DEVICE_CONFIGURATIONS[device_type]
+                ]
+            raise NotImplementedError(f"Multi-device type '{device_type}' requires configuration but none provided")
+        else:
+            return [
+                DeviceData(
+                    DEVICE_SN,
+                    DEVICE_NAME,
+                    DEVICE_TYPE,
+                    device_options,
+                    None,
+                    None,
+                )
+            ]
+
+    def get_devices(self, hass: HomeAssistant, device_type: str, dev: type[BaseDevice]) -> list[BaseDevice]:
+        real_devices = []
+        device_info = create_test_device_info()
+        for device_data in self.get_device_data(device_type):
+            device = dev(device_info, device_data)
+            device.configure(hass)
+            real_devices.append(device)
+        return real_devices
+
+    def device_summary(self, base_devices: list[BaseDevice]) -> str:
+        """Generate a summary string for devices."""
+        if not base_devices:
+            return "No devices available"
+
+        total_sensors = 0
+        total_binary_sensors = 0
+        total_switches = 0
+        total_numbers = 0
+        total_selects = 0
+        for device in base_devices:
+            client = Mock()
+            client.device = device
+            total_sensors += len(device.sensors(client))
+            total_binary_sensors += len(device.binary_sensors(client))
+            total_switches += len(device.switches(client))
+            total_numbers += len(device.numbers(client))
+            total_selects += len(device.selects(client))
+
+        parts = []
+        if total_sensors > 0:
+            parts.append(f"sensors: {total_sensors}")
+        if total_binary_sensors > 0:
+            parts.append(f"binary_sensors: {total_binary_sensors}")
+        if total_switches > 0:
+            parts.append(f"switches: {total_switches}")
+        if total_numbers > 0:
+            parts.append(f"sliders: {total_numbers}")
+        if total_selects > 0:
+            parts.append(f"selects: {total_selects}")
+
+        return ", ".join(parts)
+
+    def render_brief_summary(self, hass: HomeAssistant) -> str:
+        """Generate brief summary documentation and write it to summary.md."""
+        content_summary = f"{README_MARKER}\n"
+        content_summary += "### Devices available with private_api\n"
+
+        for dt, dev in devices.items():
+            if not dt.upper().startswith("DIAGNOSTIC"):
+                content = ""
+                real_devices = self.get_devices(hass, dt, dev)
+                for device in real_devices:
+                    if len(real_devices) > 1:
+                        content = content + f"\n### {device.device_data.device_type}\n"
+                    content = content + render_device_summary(device, True)
+                content_summary += f"<details><summary> {dt} <i>({self.device_summary(real_devices)})</i> </summary>"
+                content_summary += "\n<p>\n"
+                content_summary += content
+                content_summary += "\n</p></details>\n"
+                content_summary += "\n"
+
+        content_summary += "### Devices available with public_api\n"
+        for dt, dev in device_by_product.items():
+            if not dt.upper().startswith("DIAGNOSTIC"):
+                content = ""
+                real_devices = self.get_devices(hass, dt, dev)
+                for device in real_devices:
+                    if len(real_devices) > 1:
+                        content = content + f"\n### {device.device_data.device_type}\n"
+                    content = content + render_device_summary(device, True)
+                content_summary += f"<details><summary> {dt} (API) <i>({self.device_summary(real_devices)})</i> </summary>"
+
+                content_summary += "\n<p>\n"
+                content_summary += content
+                content_summary += "\n</p></details>\n"
+                content_summary += "\n"
+
+        print(content_summary)
+
+        with open(SUMMARY_FILENAME, "w+", encoding="utf-8") as f_summary:
+            f_summary.write(content_summary)
+            f_summary.write("\n")
+
+        return content_summary
+
+    def update_readme(self, summary_content: str) -> None:
+        """Replace the '## Current state' section of the README with the generated summary.
+
+        Matches from the marker up to the next top-level '## ' heading or EOF,
+        so sections added below 'Current state' in the future are preserved.
+        """
+        with open(README_FILENAME, "r", encoding="utf-8") as f:
+            readme = f.read()
+
+        pattern = re.compile(
+            rf"^{re.escape(README_MARKER)}\n.*?(?=^## |\Z)",
+            re.DOTALL | re.MULTILINE,
+        )
+        if not pattern.search(readme):
+            raise ValueError(f"Marker '{README_MARKER}' not found in {README_FILENAME}")
+
+        new_readme = pattern.sub(summary_content.rstrip() + "\n\n", readme)
+        with open(README_FILENAME, "w", encoding="utf-8") as f:
+            f.write(new_readme)
+
+        logger.info("Updated '%s' section in %s", README_MARKER, README_FILENAME)
+
+    def update_full_summary(self, hass: HomeAssistant):
+        """Generate full device documentation."""
+        # Create output directory if it doesn't exist
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+        for dt, dev in devices.items():
+            if not dt.upper().startswith("DIAGNOSTIC"):
+                content = ""
+                real_devices = self.get_devices(hass, dt, dev)
+                for device in real_devices:
+                    if len(real_devices) > 1:
+                        content = content + f"\n### {device.device_data.device_type}\n"
+                    content = content + render_device_summary(device)
+
+                filename = f"{OUTPUT_DIR}/{dt}.md"
+                with open(filename, "w+", encoding="utf-8") as f:
+                    f.write(f"## {dt}\n")
+                    f.write(content)
+                    f.write("\n\n")
+
+                print(f"- [{dt}](devices/{dt}.md)")
+
+        for dt, dev in device_by_product.items():
+            if not dt.upper().startswith("DIAGNOSTIC"):
+                content = ""
+                real_devices = self.get_devices(hass, dt, dev)
+                for device in real_devices:
+                    if len(real_devices) > 1:
+                        content = content + f"\n### {device.device_data.device_type}\n"
+                    content = content + render_device_summary(device)
+
+                name = dt.replace(" ", "_")
+                filename = f"{OUTPUT_DIR}/{name}-Public.md"
+                with open(filename, "w+", encoding="utf-8") as f:
+                    f.write(f"## {name}\n")
+                    f.write(content)
+                    f.write("\n\n")
+
+                print(f"- [{name}](devices/{name}-Public.md)")
+
+
+class MarkdownRenderer:
+    """Handles rendering of entities to markdown format."""
+
+    def sample_command(self, e: EcoFlowBaseCommandEntity) -> dict[str, Any] | PrivateAPIMessageProtocol | None:
+        """Build a sample command, or None for entities that send it themselves."""
+        try:
+            return e.command_dict(MARKER_VALUE)
+        except ValueError:
+            return None
+
+    def command_ro(self, e: EcoFlowBaseCommandEntity) -> str:
+        """Check if entity is read-only."""
+        return " _(read-only)_" if self.sample_command(e) is None else ""
+
+    def prepare_options(self, options: dict[str, Any]) -> str:
+        """Prepare options string for display."""
+        return ", ".join([f"{k} ({v})" for k, v in options.items()])
+
+    def prepare_command(self, e: EcoFlowBaseCommandEntity) -> str:
+        """Prepare command string for display."""
+        command_dict = self.sample_command(e)
+        if command_dict is not None:
+            if isinstance(command_dict, dict):
+                json_dict = command_dict
+            elif isinstance(command_dict, PrivateAPIMessageProtocol):
+                json_dict = command_dict.to_dict()
+            else:
+                raise TypeError(f"Unsupported command_dict type: {type(command_dict).__name__}")
+
+            # Check if params exist and update marker values
+            if "params" in json_dict:
+                for k, v in json_dict["params"].items():
+                    if v == MARKER_VALUE:
+                        json_dict["params"][k] = "VALUE"
+
+            return json.dumps(json_dict)
+        else:
+            return "_ command not available _"
+
+    def render_sensor(self, sw: BaseSensorEntity, brief: bool = False) -> str:
+        """Render sensor entity to markdown."""
+        if not isinstance(sw, EcoFlowDictEntity):
+            res = f"- {sw.name}"
+        elif brief:
+            if sw.enabled_default:
+                res = f"- {sw.name}"
+            else:
+                if sw.auto_enable:
+                    res = f"- {sw.name}  _(auto)_"
+                else:
+                    res = f"- {sw.name}  _(disabled)_"
+        else:
+            if sw.enabled_default:
+                res = f"- {sw.name} (`{sw.mqtt_key}`)"
+            else:
+                if sw.auto_enable:
+                    res = f"- {sw.name} (`{sw.mqtt_key}`)   _(auto)_"
+                else:
+                    res = f"- {sw.name} (`{sw.mqtt_key}`)   _(disabled)_"
+
+        # Check for energy sensor on all sensor types
+        if hasattr(sw, "energy_sensor"):
+            sw.entity_id = f"sensor.{sw._attr_unique_id}"
+            energy_sensor = sw.energy_sensor()
+            if energy_sensor is not None:
+                res = res + f" (energy:  {energy_sensor.name})"
+
+        return res
+
+    def render_binary_sensor(self, sw: MiscBinarySensorEntity, brief: bool = False) -> str:
+        """Render sensor entity to markdown."""
+        if not isinstance(sw, EcoFlowDictEntity):
+            res = f"- {sw.name}"
+        elif brief:
+            if sw.enabled_default:
+                res = f"- {sw.name}"
+            else:
+                if sw.auto_enable:
+                    res = f"- {sw.name}  _(auto)_"
+                else:
+                    res = f"- {sw.name}  _(disabled)_"
+        else:
+            if sw.enabled_default:
+                res = f"- {sw.name} (`{sw.mqtt_key}`)"
+            else:
+                if sw.auto_enable:
+                    res = f"- {sw.name} (`{sw.mqtt_key}`)   _(auto)_"
+                else:
+                    res = f"- {sw.name} (`{sw.mqtt_key}`)   _(disabled)_"
+
+        return res
+
+    def render_switch(self, sw: BaseSwitchEntity, brief: bool = False) -> str:
+        """Render switch entity to markdown."""
+        if brief:
+            return f"- {sw.name}{self.command_ro(sw)}"
+        else:
+            return f"- {sw.name} (`{sw.mqtt_key}` -> `{self.prepare_command(sw)}`)"
+
+    def render_number(self, sw: BaseNumberEntity, brief: bool = False) -> str:
+        """Render number entity to markdown."""
+        if brief:
+            return f"- {sw.name}{self.command_ro(sw)}"
+        else:
+            return "- %s (`%s` -> `%s` [%d - %d])" % (  # noqa: UP031
+                sw.name,
+                sw.mqtt_key,
+                self.prepare_command(sw),
+                int(sw.native_min_value),
+                int(sw.native_max_value),
+            )
+
+    def render_select(self, sw: BaseSelectEntity, brief: bool = False) -> str:
+        """Render select entity to markdown."""
+        if brief:
+            return f"- {sw.name}{self.command_ro(sw)}"
+        else:
+            return "- %s (`%s` -> `%s` [%s])" % (  # noqa: UP031
+                sw.name,
+                sw.mqtt_key,
+                self.prepare_command(sw),
+                self.prepare_options(sw.options_dict()),
+            )
+
+    def render_device_summary(self, device: BaseDevice, brief: bool = False) -> str:
+        """Render complete device summary to markdown."""
+        client = Mock()
+        client.device = device
+        res = ""
+
+        sensors = device.sensors(client)
+        if len(sensors) > 0:
+            res += "\n*Sensors*\n"
+            for sw in sensors:
+                res += self.render_sensor(sw, brief) + "\n"
+
+        binary_sensors = device.binary_sensors(client)
+        if len(binary_sensors) > 0:
+            res += "\n*Binary sensors*\n"
+            for sw in binary_sensors:
+                res += self.render_binary_sensor(sw, brief) + "\n"
+
+        switches = device.switches(client)
+        if len(switches) > 0:
+            res += "\n*Switches*\n"
+            for sw in switches:
+                res += self.render_switch(sw, brief) + "\n"
+
+        numbers = device.numbers(client)
+        if len(numbers) > 0:
+            res += "\n*Sliders (numbers)*\n"
+            for sw in numbers:
+                res += self.render_number(sw, brief) + "\n"
+
+        selects = device.selects(client)
+        if len(selects) > 0:
+            res += "\n*Selects*\n"
+            for sw in selects:
+                res += self.render_select(sw, brief) + "\n"
+
+        return res
+
+
+# Global renderer instance
+renderer = MarkdownRenderer()
+
+
+# Convenience functions for backwards compatibility
+def render_device_summary(device: BaseDevice, brief: bool = False) -> str:
+    """Backwards compatibility wrapper."""
+    return renderer.render_device_summary(device, brief)
+
+
+if __name__ == "__main__":
+    print("Generate docs started !")
+
+    async def main():
+        hass = await MockSetup.setup_hass()
+        generator = DocumentationGenerator()
+
+        generator.update_full_summary(hass)
+        summary_content = generator.render_brief_summary(hass)
+        generator.update_readme(summary_content)
+
+        print("Generate docs finished !")
+
+    asyncio.run(main())
