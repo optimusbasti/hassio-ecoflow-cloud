@@ -1,35 +1,71 @@
 name: Upstream sync check
 
+# Nur Meldung, nie Übernahme: Der Workflow liest, vergleicht und öffnet
+# höchstens Issues. Keine Merges, Releases, Tags oder Downloads.
+
 on:
   schedule:
-    # Monthly, 1st day @ 08:00 UTC
-    - cron: "0 8 1 * *"
+    # Wöchentlich, Montag 08:00 UTC
+    - cron: "0 8 * * 1"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Nur ausgeben, keine Issues anlegen"
+        type: boolean
+        default: true
+      local_version_override:
+        description: "Test: produktive Version simulieren (z. B. 1.5.3), leer = echter Release"
+        type: string
+        default: ""
 
 permissions:
   contents: read
   issues: write
 
+defaults:
+  run:
+    # explizit bash: GitHub setzt dann -eo pipefail (ohne Angabe nur -e)
+    shell: bash
+
+env:
+  UPSTREAM_REPO: tolwi/hassio-ecoflow-cloud
+  # Upstream-PR, dessen Fix der produktive Fork-Release enthält
+  WATCH_PR: "909"
+  # Pfade der MQTT-/Reconnect-Logik, deren Upstream-Änderungen gemeldet werden
+  WATCH_PATHS_REGEX: '^custom_components/ecoflow_cloud/(api/__init__\.py|sensor\.py|devices/public/stream_[^/]+\.py)$'
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+
 jobs:
   check:
-    name: Compare BTS manifest version vs upstream tolwi latest release
+    name: Compare productive fork release vs upstream tolwi
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Read local manifest version
+      - name: Read productive fork release
         id: local
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OVERRIDE: ${{ inputs.local_version_override }}
         run: |
-          ver=$(jq -r .version custom_components/ecoflow_cloud/manifest.json)
+          # Maßgeblich ist der neueste Release (das installiert HACS), nicht main.
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          ver=$(gh api "repos/$GITHUB_REPOSITORY/contents/custom_components/ecoflow_cloud/manifest.json?ref=$tag" --jq .content | base64 -d | jq -r .version)
+          if [ -z "$ver" ] || [ "$ver" = "null" ]; then
+            echo "::error::Manifest-Version von Release $tag nicht lesbar"; exit 1
+          fi
+          if [ -n "$OVERRIDE" ]; then
+            echo "::warning::Testmodus: produktive Version $ver durch $OVERRIDE ersetzt"
+            ver="$OVERRIDE"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$ver" >> "$GITHUB_OUTPUT"
-          echo "Local BTS version: $ver"
+          echo "Produktiver Fork-Release: $tag (manifest $ver)"
 
       - name: Read upstream latest release tag
         id: upstream
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag=$(gh release view --repo tolwi/hassio-ecoflow-cloud --json tagName --jq .tagName)
+          tag=$(gh release view --repo "$UPSTREAM_REPO" --json tagName --jq .tagName)
           echo "tag=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "Upstream latest tag: $tag"
 
@@ -39,14 +75,13 @@ jobs:
           LOCAL: ${{ steps.local.outputs.version }}
           UPSTREAM: ${{ steps.upstream.outputs.tag }}
         run: |
-          # Strip any +bts.N suffix from local for the semver comparison —
+          # Strip any +bts.N / -bts.N suffix from local for the semver comparison —
           # we only care about the upstream-base part vs upstream tag.
-          LOCAL_BASE="${LOCAL%%+*}"
+          LOCAL_BASE="${LOCAL%%[+-]*}"
           UPSTREAM_CLEAN="${UPSTREAM#v}"
+          echo "local_base=$LOCAL_BASE" >> "$GITHUB_OUTPUT"
 
           # Use sort -V for natural version comparison. Drift = upstream > local-base.
-          # If upstream <= local-base, BTS is already ahead (expected for our fork)
-          # and no issue should be opened.
           if [ "$LOCAL_BASE" = "$UPSTREAM_CLEAN" ]; then
             echo "drift=false" >> "$GITHUB_OUTPUT"
             echo "Local base $LOCAL_BASE matches upstream $UPSTREAM_CLEAN — in sync"
@@ -61,33 +96,108 @@ jobs:
             fi
           fi
 
-      - name: Open issue if drift detected
-        if: steps.compare.outputs.drift == 'true'
+      - name: Check watched upstream PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          state=$(gh pr view "$WATCH_PR" --repo "$UPSTREAM_REPO" --json state --jq .state)
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          echo "Upstream PR #$WATCH_PR: $state"
+          # CLOSED (nicht gemergt) ist der bekannte Stand; MERGED oder OPEN ist eine Änderung.
+          if [ "$state" = "CLOSED" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check upstream changes to MQTT/reconnect paths
+        id: paths
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOCAL_BASE: ${{ steps.compare.outputs.local_base }}
+        run: |
+          # Vergleich muss gelingen, sonst wäre „keine Änderungen" eine ungeprüfte Aussage.
+          all=$(gh api "repos/$UPSTREAM_REPO/compare/v${LOCAL_BASE}...main" --jq '.files[].filename') || {
+            echo "::error::Compare v${LOCAL_BASE}...main bei $UPSTREAM_REPO fehlgeschlagen"; exit 1; }
+          count=$(echo "$all" | grep -c . || true)
+          echo "Upstream-Dateien geändert seit v${LOCAL_BASE}: $count"
+          # Die Compare-API liefert höchstens 300 Dateien – darüber wäre „keine Änderung" ungeprüft.
+          if [ "$count" -ge 300 ]; then
+            echo "::error::Compare-Liste abgeschnitten (>= 300 Dateien), Ergebnis nicht belastbar"; exit 1
+          fi
+          files=$(echo "$all" | grep -E "$WATCH_PATHS_REGEX" || true)
+          if [ -n "$files" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "files<<EOF"
+              echo "$files"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "Geänderte überwachte Upstream-Dateien seit v${LOCAL_BASE}:"
+            echo "$files"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Keine Änderungen an überwachten Pfaden seit v${LOCAL_BASE}"
+          fi
+
+      - name: Report findings
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LOCAL: ${{ steps.local.outputs.version }}
+          LOCAL_TAG: ${{ steps.local.outputs.tag }}
+          LOCAL_BASE: ${{ steps.compare.outputs.local_base }}
           UPSTREAM: ${{ steps.upstream.outputs.tag }}
+          DRIFT: ${{ steps.compare.outputs.drift }}
+          PR_CHANGED: ${{ steps.pr.outputs.changed }}
+          PR_STATE: ${{ steps.pr.outputs.state }}
+          PATHS_CHANGED: ${{ steps.paths.outputs.changed }}
+          PATHS: ${{ steps.paths.outputs.files }}
         run: |
-          existing=$(gh issue list --search "Upstream drift in:title" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$existing" ]; then
-            echo "Open drift issue already exists (#$existing) — skipping"
-            exit 0
+          report() {
+            # $3 = Suchschlüssel für die Deduplizierung gegen offene Issues
+            title="$1"; body="$2"; key="$3"
+            existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --search "\"${key}\" in:title" --state open --json number --jq '.[0].number // empty')
+            if [ -n "$existing" ]; then
+              echo "Offenes Issue existiert bereits (#$existing): $title — übersprungen"
+            elif [ "$DRY_RUN" = "true" ]; then
+              echo "DRY-RUN – würde Issue anlegen: $title"
+              echo "$body"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --label "upstream-sync" --body "$body"
+            fi
+          }
+
+          review=$(printf '%s\n' \
+            "Prüfschritte (manuell, nichts wird automatisch übernommen):" \
+            "1. Diff prüfen — vor allem \`api/__init__.py\`, \`sensor.py\`, \`devices/public/stream_*.py\`" \
+            "2. Klären, ob upstream einen gleichwertigen MQTT-Reconnect hat (Ersatz für PR #${WATCH_PR})" \
+            "3. Neuen Fork-Stand auf eigenem Zweig bauen, Smoke-Tests (\`pytest tests/\`)" \
+            "4. Release bewusst manuell anlegen (release.yml ist deaktiviert), erst danach HACS-Download")
+
+          if [ "$DRIFT" = "true" ]; then
+            report "Upstream drift: tolwi v${UPSTREAM} > BTS ${LOCAL_TAG} (${LOCAL})" "$(printf '%s\n' \
+              "Upstream tolwi/hassio-ecoflow-cloud hat einen neueren Release als der produktive Fork-Release." "" \
+              "- Produktiver Fork-Release: \`${LOCAL_TAG}\` (manifest \`${LOCAL}\`)" \
+              "- Upstream latest: \`v${UPSTREAM}\`" \
+              "- Compare: https://github.com/${UPSTREAM_REPO}/compare/v${LOCAL_BASE}...v${UPSTREAM}" "" "$review")" \
+              "Upstream drift: tolwi v${UPSTREAM}"
           fi
-          body=$(printf '%s\n' \
-            "Monthly check found upstream tolwi/hassio-ecoflow-cloud has a newer release than this fork." \
-            "" \
-            "- BTS local manifest: \`${LOCAL}\`" \
-            "- Upstream latest: \`v${UPSTREAM}\`" \
-            "- Compare: https://github.com/tolwi/hassio-ecoflow-cloud/compare/v${LOCAL}...v${UPSTREAM}" \
-            "" \
-            "Review-Schritt:" \
-            "1. Diff prüfen — vor allem auf \`devices/public/stream_*.py\` (BTS-Patches betroffen?)" \
-            "2. Lokal mergen, Konflikte resolven" \
-            "3. \`manifest.json\` version bumpen (Patch-Level oder \`+bts.<N>\`-Suffix)" \
-            "4. \`BTS-FORK.md\` ggf. um neue Upstream-Notes ergänzen" \
-            "5. Smoke-Tests laufen lassen (\`pytest tests/\`)" \
-            "6. Tag + Release pushen → release-drafter generiert Notes")
-          gh issue create \
-            --title "Upstream drift: tolwi v${UPSTREAM} > BTS v${LOCAL}" \
-            --label "upstream-sync" \
-            --body "$body"
+
+          if [ "$PR_CHANGED" = "true" ]; then
+            report "Upstream PR #${WATCH_PR} geändert: ${PR_STATE}" "$(printf '%s\n' \
+              "Der überwachte Upstream-PR https://github.com/${UPSTREAM_REPO}/pull/${WATCH_PR} hat den Status \`${PR_STATE}\` (bekannt war CLOSED, nicht gemergt)." "" "$review")" \
+              "Upstream PR #${WATCH_PR} geändert: ${PR_STATE}"
+          fi
+
+          if [ "$PATHS_CHANGED" = "true" ]; then
+            report "Upstream-Änderungen an MQTT/Reconnect-Pfaden seit v${LOCAL_BASE}" "$(printf '%s\n' \
+              "Upstream main enthält seit \`v${LOCAL_BASE}\` Änderungen an überwachten Dateien:" "" \
+              "$(while read -r f; do echo "- \`$f\`"; done <<< "$PATHS")" "" \
+              "- Compare: https://github.com/${UPSTREAM_REPO}/compare/v${LOCAL_BASE}...main" "" "$review")" \
+              "Upstream-Änderungen an MQTT/Reconnect-Pfaden seit v${LOCAL_BASE}"
+          fi
+
+          if [ "$DRIFT" != "true" ] && [ "$PR_CHANGED" != "true" ] && [ "$PATHS_CHANGED" != "true" ]; then
+            echo "Nichts zu melden."
+          fi

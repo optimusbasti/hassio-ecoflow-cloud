@@ -15,7 +15,7 @@
   "issue_tracker": "https://github.com/optimusbasti/hassio-ecoflow-cloud/issues",
   "requirements": [
     "paho-mqtt>=2.1.0",
-    "protobuf==6.32.0",
+    "protobuf>=6.32.0,<8",
     "jsonpath-ng>=1.7.0"
   ],
   "version": "1.5.3"
